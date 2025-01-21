@@ -54,30 +54,6 @@ def send_welcome(message):
     bot.reply_to(message,
                  "Привет! Отправь мне текст на русском языке, и я верну его в Брайле для прокалывания. Тест разобьетя по словам. Если в строке больше 30 симболов - происходит перенос на следующию строчку. Выравнивание пока в процессе. Рекомендую печатать из Блокнота, 24 шрифтом. Просто прокалываем черные точки и с другой стороны - текст по Брайлю")
 
-"""
-@bot.message_handler(func=lambda message: True)
-def handle_text(message):
-    original_text = message.text
-    braille_for_poking = text_to_braille_right_to_left(original_text)
-    # Разделяем строку на слова по пробелу
-    words = braille_for_poking.split()
-    sliced_words = words  # Срез "обратно"
-
-    # Объединяем слова обратно в строку
-
-    sliced_braille = ' '.join(sliced_words)
-
-
-    # Сохранить в файл
-    filename = "braille_for_poking.txt"
-    with open(filename, "w", encoding="utf-8") as file:
-        file.write(sliced_braille)
-
-    # Отправить файл
-    with open(filename, "rb") as file:
-        bot.send_document(message.chat.id, file)
-
-"""
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
     original_text = message.text
@@ -91,7 +67,7 @@ def handle_text(message):
 
     # Формируем строки, не превышающие 30 символов
     for word in words:
-        if current_length + len(word) + 1 > 30:  # Если длина строки превышает 30
+        if current_length + len(word) + 1 > 35:  # Если длина строки превышает 30
             lines.append(' '.join(current_line))  # Добавляем текущую строку в список строк
             current_line = []  # Очищаем текущую строку
             current_length = 0  # Сбрасываем длину строки
