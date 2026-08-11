@@ -1,10 +1,10 @@
 import os
+from io import BytesIO
 
 import telebot
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TOKEN:
@@ -13,7 +13,6 @@ if not TOKEN:
 bot = telebot.TeleBot(TOKEN)
 
 
-# Russian Braille alphabet and basic punctuation.
 BRAILLE_MAP = {
     "а": "⠁", "б": "⠃", "в": "⠺", "г": "⠛", "д": "⠙",
     "е": "⠑", "ё": "⠡", "ж": "⠚", "з": "⠵", "и": "⠊",
@@ -88,11 +87,27 @@ def split_into_lines(text: str, max_length: int = MAX_LINE_LENGTH) -> list[str]:
     return lines
 
 
+def build_docx(lines: list[str]) -> BytesIO:
+    """Create a printable DOCX in memory."""
+    document = Document()
+
+    for line in lines:
+        paragraph = document.add_paragraph(line)
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        paragraph.runs[0].font.size = Pt(22)
+
+    buffer = BytesIO()
+    document.save(buffer)
+    buffer.seek(0)
+    buffer.name = "braille_for_poking.docx"
+    return buffer
+
+
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     bot.reply_to(
         message,
-        "Привет! Отправь мне текст на русском языке, и я верну его "
+        "Привет! Отправь мне текст на русском языке, и я верну DOCX-шаблон "
         "в Брайле для прокалывания. Текст разобьётся по словам.",
     )
 
@@ -102,33 +117,8 @@ def handle_text(message):
     braille_for_poking = text_to_braille_right_to_left(message.text)
     reversed_lines = split_into_lines(braille_for_poking)[::-1]
 
-    doc_filename = "braille_for_poking.docx"
-    doc = Document()
-    for line in reversed_lines:
-        paragraph = doc.add_paragraph(line)
-        run = paragraph.runs[0]
-        run.font.size = Pt(22)
-        paragraph.alignment = 2
-    doc.save(doc_filename)
-
-    pdf_filename = "braille_for_poking.pdf"
-    pdf = canvas.Canvas(pdf_filename, pagesize=letter)
-    pdf.setFont("Times-Roman", 22)
-
-    y_position = 750
-    for line in reversed_lines:
-        pdf.drawString(500, y_position, line)
-        y_position -= 30
-        if y_position < 50:
-            pdf.showPage()
-            pdf.setFont("Times-Roman", 22)
-            y_position = 750
-
-    pdf.save()
-
-    with open(doc_filename, "rb") as doc_file, open(pdf_filename, "rb") as pdf_file:
-        bot.send_document(message.chat.id, doc_file)
-        bot.send_document(message.chat.id, pdf_file)
+    document = build_docx(reversed_lines)
+    bot.send_document(message.chat.id, document)
 
 
 if __name__ == "__main__":

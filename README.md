@@ -2,7 +2,7 @@
 
 Experimental Telegram bot that converts Russian text into a mirrored Braille template for manual punching.
 
-The idea is simple: send text to the bot, receive a printable document, print it, and use the mirrored dots as a guide when punching from the back side of the sheet. After the sheet is turned over, the raised dots are oriented for reading.
+The idea is simple: send text to the bot, receive a printable DOCX document, print it, and use the mirrored dots as a guide when punching from the back side of the sheet. After the sheet is turned over, the raised dots are oriented for reading.
 
 > Work in progress. This is a hobby project and has not been validated as assistive technology. For real-world use, verify the resulting Braille with an experienced reader.
 
@@ -12,7 +12,7 @@ The idea is simple: send text to the bot, receive a printable document, print it
 2. Characters are converted to six-dot Russian Braille.
 3. Each Braille cell is mirrored horizontally and the text is reversed for punching from the back side.
 4. The result is wrapped into printable lines.
-5. The bot returns generated DOCX and PDF files.
+5. The bot generates a DOCX file and sends it back to the user.
 
 Unsupported characters currently remain as `?`.
 
@@ -21,7 +21,6 @@ Unsupported characters currently remain as `?`.
 - Python
 - pyTelegramBotAPI
 - python-docx
-- ReportLab
 
 ## Run locally
 
@@ -61,7 +60,7 @@ python bot.py
 
 Пользователь отправляет боту текст на русском языке. Бот переводит его в шеститочечный Брайль, зеркально отражает ячейки и разворачивает текст так, чтобы получился шаблон для прокалывания бумаги с обратной стороны. После переворота листа рельефные точки оказываются ориентированы для чтения.
 
-Сейчас бот возвращает DOCX и PDF.
+Бот формирует DOCX, который можно распечатать и использовать как шаблон.
 
 ### Запуск
 
