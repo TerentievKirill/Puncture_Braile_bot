@@ -1,125 +1,135 @@
+import os
+
 import telebot
-import setting
 from docx import Document
 from docx.shared import Pt
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-bot = telebot.TeleBot(setting.bot)
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if not TOKEN:
+    raise RuntimeError("TELEGRAM_BOT_TOKEN environment variable is not set")
+
+bot = telebot.TeleBot(TOKEN)
 
 
-# Словарь русского алфавита Брайля
-def char_to_braille(char):
-    braille_map = {
-        'а': '⠁', 'б': '⠃', 'в': '⠺', 'г': '⠛', 'д': '⠙',
-        'е': '⠑', 'ё': '⠡', 'ж': '⠚', 'з': '⠵', 'и': '⠊',
-        'й': '⠯', 'к': '⠅', 'л': '⠇', 'м': '⠍', 'н': '⠝',
-        'о': '⠕', 'п': '⠏', 'р': '⠗', 'с': '⠎', 'т': '⠞',
-        'у': '⠥', 'ф': '⠋', 'х': '⠓', 'ц': '⠉', 'ч': '⠟',
-        'ш': '⠱', 'щ': '⠭', 'ъ': '⠷', 'ы': '⠮', 'ь': '⠾',
-        'э': '⠪', 'ю': '⠳', 'я': '⠫', ' ': ' ',  # Пробел
-        ',': '⠂', '.': '⠲', '!': '⠖', '?': '⠦', '-': '⠤',
-        ':': '⠒', ';': '⠆', '(': '⠶', ')': '⠶',
-    }
-    return braille_map.get(char.lower(), '?')
+# Russian Braille alphabet and basic punctuation.
+BRAILLE_MAP = {
+    "а": "⠁", "б": "⠃", "в": "⠺", "г": "⠛", "д": "⠙",
+    "е": "⠑", "ё": "⠡", "ж": "⠚", "з": "⠵", "и": "⠊",
+    "й": "⠯", "к": "⠅", "л": "⠇", "м": "⠍", "н": "⠝",
+    "о": "⠕", "п": "⠏", "р": "⠗", "с": "⠎", "т": "⠞",
+    "у": "⠥", "ф": "⠋", "х": "⠓", "ц": "⠉", "ч": "⠟",
+    "ш": "⠱", "щ": "⠭", "ъ": "⠷", "ы": "⠮", "ь": "⠾",
+    "э": "⠪", "ю": "⠳", "я": "⠫", " ": " ",
+    ",": "⠂", ".": "⠲", "!": "⠖", "?": "⠦", "-": "⠤",
+    ":": "⠒", ";": "⠆", "(": "⠶", ")": "⠶",
+}
+
+MAX_LINE_LENGTH = 35
 
 
-# Зеркальное отображение символа Брайля (горизонтально)
-def mirror_braille_horizontal(braille_char):
-    if braille_char == ' ':
-        return ' '  # Пробел не изменяется
+def char_to_braille(char: str) -> str:
+    """Convert one Russian character to a six-dot Braille character."""
+    return BRAILLE_MAP.get(char.lower(), "?")
 
-    binary = ord(braille_char) - 0x2800  # Убираем базовый код для Брайля
 
+def mirror_braille_horizontal(braille_char: str) -> str:
+    """Mirror a six-dot Braille cell horizontally for punching from the back."""
+    if braille_char == " ":
+        return " "
+
+    codepoint = ord(braille_char)
+    if not 0x2800 <= codepoint <= 0x28FF:
+        return braille_char
+
+    binary = codepoint - 0x2800
     mirrored_binary = (
-            ((binary & 0b000001) << 3) |
-            ((binary & 0b000010) << 3) |
-            ((binary & 0b000100) << 3) |
-            ((binary & 0b001000) >> 3) |
-            ((binary & 0b010000) >> 3) |
-            ((binary & 0b100000) >> 3)
+        ((binary & 0b000001) << 3)
+        | ((binary & 0b000010) << 3)
+        | ((binary & 0b000100) << 3)
+        | ((binary & 0b001000) >> 3)
+        | ((binary & 0b010000) >> 3)
+        | ((binary & 0b100000) >> 3)
     )
-    return chr(0x2800 + mirrored_binary)  # Преобразуем обратно в символ Брайля
+    return chr(0x2800 + mirrored_binary)
 
 
-# Преобразование текста в Брайль с зеркалированием и записью справа налево
-def text_to_braille_right_to_left(text):
-    braille_text = ''.join(char_to_braille(char) for char in text)
-    mirrored_text = ''.join(mirror_braille_horizontal(char) for char in braille_text)
-    return mirrored_text[::-1]  # Записываем результат справа налево
+def text_to_braille_right_to_left(text: str) -> str:
+    """Build the mirrored right-to-left template used for manual punching."""
+    braille_text = "".join(char_to_braille(char) for char in text)
+    mirrored_text = "".join(
+        mirror_braille_horizontal(char) for char in braille_text
+    )
+    return mirrored_text[::-1]
 
 
-# Обработка сообщений
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message,
-                 "Привет! Отправь мне текст на русском языке, и я верну его в Брайле для прокалывания. Тест разобьется по словам.")
+def split_into_lines(text: str, max_length: int = MAX_LINE_LENGTH) -> list[str]:
+    """Wrap text by words without exceeding the target line length when possible."""
+    words = text.split()
+    lines = []
+    current_line = []
+    current_length = 0
 
-
-@bot.message_handler(func=lambda message: True)
-def handle_text(message):
-    original_text = message.text
-    braille_for_poking = text_to_braille_right_to_left(original_text)
-
-    # Разбиваем текст на слова
-    words = braille_for_poking.split()
-    lines = []  # Список строк
-    current_line = []  # Текущая строка
-    current_length = 0  # Текущая длина строки
-
-    # Формируем строки, не превышающие 35 символов
     for word in words:
-        if current_length + len(word) + 1 > 35:  # Если длина строки превышает 35
-            lines.append(' '.join(current_line))  # Добавляем текущую строку в список строк
-            current_line = []  # Очищаем текущую строку
-            current_length = 0  # Сбрасываем длину строки
+        separator = 1 if current_line else 0
+        if current_line and current_length + separator + len(word) > max_length:
+            lines.append(" ".join(current_line))
+            current_line = []
+            current_length = 0
+            separator = 0
 
-        current_line.append(word)  # Добавляем слово в текущую строку
-        current_length += len(word) + 1  # Учитываем длину слова и пробел
+        current_line.append(word)
+        current_length += separator + len(word)
 
-    if current_line:  # Добавляем последнюю строку, если она есть
-        lines.append(' '.join(current_line))
+    if current_line:
+        lines.append(" ".join(current_line))
 
-    # Инвертируем порядок строк
-    reversed_lines = lines[::-1]
+    return lines
 
-    # Создаем новый документ .docx
+
+@bot.message_handler(commands=["start"])
+def send_welcome(message):
+    bot.reply_to(
+        message,
+        "Привет! Отправь мне текст на русском языке, и я верну его "
+        "в Брайле для прокалывания. Текст разобьётся по словам.",
+    )
+
+
+@bot.message_handler(content_types=["text"])
+def handle_text(message):
+    braille_for_poking = text_to_braille_right_to_left(message.text)
+    reversed_lines = split_into_lines(braille_for_poking)[::-1]
+
+    doc_filename = "braille_for_poking.docx"
     doc = Document()
-
-    # Настроим форматирование текста
     for line in reversed_lines:
         paragraph = doc.add_paragraph(line)
         run = paragraph.runs[0]
-        run.font.size = Pt(22)  # Устанавливаем размер шрифта 22
-        paragraph.alignment = 2  # Выравнивание по правому краю
-
-    # Сохраняем документ
-    doc_filename = "braille_for_poking.docx"
+        run.font.size = Pt(22)
+        paragraph.alignment = 2
     doc.save(doc_filename)
 
-    # Создаем PDF с шрифтом Times-Roman
     pdf_filename = "braille_for_poking.pdf"
-    c = canvas.Canvas(pdf_filename, pagesize=letter)
-    c.setFont("Times-Roman", 12)  # Используем Times-Roman для кириллицы
+    pdf = canvas.Canvas(pdf_filename, pagesize=letter)
+    pdf.setFont("Times-Roman", 22)
 
-    # Устанавливаем размер шрифта 22 в PDF
-    c.setFont("Times-Roman", 22)
-
-    y_position = 750  # Начальная вертикальная позиция
+    y_position = 750
     for line in reversed_lines:
-        c.drawString(500, y_position, line)  # Отрисовываем текст с отступом от правого края
-        y_position -= 30  # Смещаемся вниз для следующей строки
+        pdf.drawString(500, y_position, line)
+        y_position -= 30
         if y_position < 50:
-            c.showPage()  # Переходим на новую страницу, если текст не помещается
-            c.setFont("Times-Roman", 22)  # Устанавливаем шрифт на новой странице
+            pdf.showPage()
+            pdf.setFont("Times-Roman", 22)
+            y_position = 750
 
-    c.save()
+    pdf.save()
 
-    # Отправляем оба файла
     with open(doc_filename, "rb") as doc_file, open(pdf_filename, "rb") as pdf_file:
         bot.send_document(message.chat.id, doc_file)
         bot.send_document(message.chat.id, pdf_file)
 
 
-# Запуск бота
-bot.polling()
+if __name__ == "__main__":
+    bot.infinity_polling()

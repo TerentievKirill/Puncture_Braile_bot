@@ -1,1 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Local secrets
+.env
 setting.py
+
+# Generated files
+braille_for_poking.docx
+braille_for_poking.pdf
